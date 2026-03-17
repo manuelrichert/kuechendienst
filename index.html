@@ -116,10 +116,11 @@ html, body {
   background: radial-gradient(ellipse at 30% 20%, #1a1a3e 0%, var(--bg) 60%),
               radial-gradient(ellipse at 80% 80%, #1e0a2e 0%, transparent 50%);
   align-items: center;
-  justify-content: center;
-  padding: 32px 24px;
+  justify-content: flex-start;
+  padding: 48px 24px 40px;
   text-align: center;
   gap: 0;
+  overflow-y: auto;
 }
 
 .welcome-blob {
@@ -785,7 +786,7 @@ html, body {
     <!-- filled by JS -->
   </div>
 
-  <div style="margin-top:20px;">
+  <div style="margin-top:20px;padding-bottom:32px;">
     <button class="btn-secondary" style="width:200px;" onclick="showSetupParent()">
       👨‍👩‍👧 Eltern-Login
     </button>
