@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Küchendienst">
+<meta name="theme-color" content="#16213e">
+<link rel="manifest" href="manifest.json">
+<title>🍽️ Küchendienst</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, onValue, push, remove, update }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
+  // 👉 Ersetze diese Werte mit deinen eigenen Firebase-Projektdaten!
+  //    Anleitung weiter unten in der App (Eltern-Modus → Einstellungen)
+  const FIREBASE_CONFIG = {
+    apiKey:            window._FB_API_KEY            || "DEIN_API_KEY",
+    authDomain:        window._FB_AUTH_DOMAIN        || "DEIN_PROJEKT.firebaseapp.com",
+    databaseURL:       window._FB_DATABASE_URL       || "https://DEIN_PROJEKT-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId:         window._FB_PROJECT_ID         || "DEIN_PROJEKT",
+    storageBucket:     window._FB_STORAGE_BUCKET     || "DEIN_PROJEKT.appspot.com",
+    messagingSenderId: window._FB_MESSAGING_SENDER   || "000000000000",
+    appId:             window._FB_APP_ID             || "1:000000000000:web:0000000000000000"
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
+  let app, db;
+  let listeners = [];
+
+  window.initFirebase = (config) => {
+    try {
+      // Remove old app if exists
+      if (app) {
+        listeners.forEach(u => u());
+        listeners = [];
+      }
+      app = initializeApp(config, 'main-' + Date.now());
+      db = getDatabase(app);
+      window._db = db;
+      window._dbReady = true;
+      window.dispatchEvent(new Event('db-ready'));
+      return true;
+    } catch(e) {
+      console.error('Firebase init error:', e);
+      return false;
+    }
+  };
+
+  window.dbSet = (path, val) => set(ref(db, path), val);
+  window.dbGet = (path) => get(ref(db, path)).then(s => s.val());
+  window.dbPush = (path, val) => push(ref(db, path), val);
+  window.dbRemove = (path) => remove(ref(db, path));
+  window.dbUpdate = (path, val) => update(ref(db, path), val);
+  window.dbListen = (path, cb) => {
+    const unsub = onValue(ref(db, path), snap => cb(snap.val()));
+    listeners.push(unsub);
+    return unsub;
+  };
+
+  // Auto-init if config is stored
+  const saved = localStorage.getItem('fb_config');
+  if (saved) {
+    try { window.initFirebase(JSON.parse(saved)); }
+    catch(e) { console.log('Config invalid'); }
+  } else {
+    // Try default config (user may have hardcoded it)
+    if (FIREBASE_CONFIG.apiKey !== "DEIN_API_KEY") {
+      window.initFirebase(FIREBASE_CONFIG);
+    }
+  }
+</script>
+
+<style>
+:root {
+  --bg:       #0f0e17;
+  --surface:  #1a1a2e;
+  --card:     #16213e;
+  --border:   rgba(255,255,255,0.08);
+  --text:     #fffffe;
+  --muted:    rgba(255,255,255,0.45);
+  --orange:   #FF6B35;
+  --teal:     #00B4D8;
+  --yellow:   #FFD60A;
+  --green:    #06D6A0;
+  --pink:     #FF70A6;
+  --radius:   18px;
+  --font-h:   'Fredoka', sans-serif;
+  --font-b:   'Quicksand', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-b);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ── SCREENS ── */
+.screen { display: none; height: 100dvh; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* ── WELCOME ── */
+#screen-welcome {
+  background: radial-gradient(ellipse at 30% 20%, #1a1a3e 0%, var(--bg) 60%),
+              radial-gradient(ellipse at 80% 80%, #1e0a2e 0%, transparent 50%);
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+  gap: 0;
+}
+
+.welcome-blob {
+  font-size: 5rem;
+  animation: float 3s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes float {
+  0%,100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-12px) rotate(3deg); }
+}
+
+.welcome-title {
+  font-family: var(--font-h);
+  font-size: 2.6rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--orange), var(--yellow));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+
+.welcome-sub {
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 40px;
+}
+
+.role-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.role-card {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+}
+
+.role-card:hover, .role-card:active { transform: scale(1.03); border-color: var(--orange); }
+
+.role-icon { font-size: 2.4rem; flex-shrink: 0; }
+.role-card h3 { font-family: var(--font-h); font-size: 1.3rem; font-weight: 600; }
+.role-card p  { font-size: 0.82rem; color: var(--muted); margin-top: 2px; font-weight: 500; }
+
+/* ── SETUP ── */
+#screen-setup {
+  background: var(--bg);
+  padding: 0;
+  overflow-y: auto;
+}
+
+.setup-inner {
+  padding: 56px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.setup-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.setup-header h2 { font-family: var(--font-h); font-size: 1.9rem; font-weight: 700; }
+.setup-header p   { color: var(--muted); font-size: 0.9rem; font-weight: 500; }
+
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.input-wrap { position: relative; }
+.input-wrap input, .input-wrap select {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-family: var(--font-b);
+  font-size: 1rem;
+  font-weight: 600;
+  transition: border-color 0.2s;
+}
+.input-wrap input:focus, .input-wrap select:focus {
+  outline: none;
+  border-color: var(--orange);
+}
+
+.emoji-row {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.emoji-opt {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--card);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.emoji-opt.sel { border-color: var(--orange); background: rgba(255,107,53,0.15); }
+
+.color-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.color-dot {
+  width: 36px; height: 36px; border-radius: 50%;
+  cursor: pointer; transition: transform 0.15s;
+  border: 3px solid transparent;
+}
+.color-dot.sel { transform: scale(1.25); border-color: white; }
+
+.btn-primary {
+  padding: 16px;
+  border-radius: 14px;
+  border: none;
+  font-family: var(--font-h);
+  font-size: 1.15rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--orange), #FF8C69);
+  color: white;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(255,107,53,0.4);
+  width: 100%;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(255,107,53,0.5); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-secondary {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-b);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--muted); font-size: 0.85rem;
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ── KID HOME ── */
+#screen-kid {
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.kid-bg-glow {
+  position: absolute;
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.18;
+  pointer-events: none;
+  transition: background 0.5s;
+}
+.kid-bg-glow.top    { top: -100px; left: -80px; }
+.kid-bg-glow.bottom { bottom: -100px; right: -80px; }
+
+.kid-header {
+  padding: 52px 24px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1;
+}
+
+.kid-greeting {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.kid-greeting .hey { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.kid-greeting .name {
+  font-family: var(--font-h);
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.kid-avatar {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
+  border: 2px solid var(--border);
+}
+
+.meals-section {
+  flex: 1;
+  padding: 0 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+  padding-bottom: 100px;
+}
+
+.date-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 4px 0 8px;
+}
+
+.meal-card {
+  background: var(--card);
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.meal-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px; height: 100%;
+  transition: width 0.3s;
+}
+
+.meal-card.done {
+  border-color: transparent;
+}
+.meal-card.done::before { width: 100%; opacity: 0.12; }
+
+.meal-card:active { transform: scale(0.97); }
+
+.meal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.meal-icon-wrap {
+  width: 50px; height: 50px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
+}
+
+.meal-check {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  transition: all 0.25s;
+}
+
+.meal-card.done .meal-check {
+  border: none;
+  font-size: 1.2rem;
+}
+
+.meal-title {
+  font-family: var(--font-h);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.meal-desc { font-size: 0.82rem; color: var(--muted); font-weight: 500; }
+
+.meal-time {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.tasks-check-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-chip {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  user-select: none;
+}
+.task-chip.sel {
+  background: rgba(6,214,160,0.15);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.submit-meal-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: 13px;
+  border: none;
+  font-family: var(--font-h);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.2s;
+}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(22,33,62,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 10px 20px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
+
+.nav-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-b);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 3px;
+}
+.nav-btn .ni { font-size: 1.3rem; }
+.nav-btn.active { background: rgba(255,107,53,0.15); color: var(--orange); }
+
+/* ── PARENT ── */
+#screen-parent {
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.parent-header {
+  padding: 52px 24px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.parent-header h1 { font-family: var(--font-h); font-size: 1.7rem; font-weight: 700; }
+
+.badge {
+  background: linear-gradient(135deg, var(--orange), var(--yellow));
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.parent-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 9px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-b);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn.active { background: rgba(255,107,53,0.18); color: var(--orange); }
+
+.parent-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 100px;
+}
+
+/* Overview cards */
+.kid-overview-card {
+  background: var(--card);
+  border-radius: 18px;
+  border: 1.5px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.koc-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.koc-avatar {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  font-size: 1.5rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.koc-name { font-family: var(--font-h); font-size: 1.2rem; font-weight: 600; }
+.koc-total { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.day-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.day-name { font-size: 0.6rem; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+
+.day-dot {
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.55rem;
+  font-weight: 800;
+  color: var(--muted);
+  transition: all 0.2s;
+}
+.day-dot.has { background: rgba(6,214,160,0.15); border-color: var(--green); color: var(--green); }
+.day-dot.today { border-color: var(--orange); }
+
+/* Entry list */
+.entry-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  animation: fadeUp 0.3s ease;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.entry-meal-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.entry-info { flex: 1; }
+.entry-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.entry-who  { font-weight: 700; font-size: 0.95rem; }
+.entry-when { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.entry-meal-name { font-size: 0.82rem; color: var(--muted); font-weight: 500; margin-top: 2px; }
+.entry-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.entry-chip {
+  font-size: 0.7rem; font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.07);
+  color: var(--muted);
+}
+
+.delete-x {
+  background: none; border: none; cursor: pointer;
+  font-size: 1rem; opacity: 0.3; transition: opacity 0.2s; padding: 4px;
+  flex-shrink: 0;
+}
+.delete-x:hover { opacity: 0.8; }
+
+/* Settings tab */
+.setting-block {
+  background: var(--card);
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.setting-block h3 { font-family: var(--font-h); font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
+
+.fb-input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+  transition: border-color 0.2s;
+}
+.fb-input:focus { outline: none; border-color: var(--teal); }
+
+.btn-teal {
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, var(--teal), #0096C7);
+  color: white;
+  font-family: var(--font-h);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(0,180,216,0.35);
+}
+.btn-teal:hover { transform: translateY(-1px); }
+
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-err { background: #FF6B6B; box-shadow: 0 0 6px #FF6B6B; }
+
+.info-box {
+  background: rgba(0,180,216,0.1);
+  border: 1px solid rgba(0,180,216,0.3);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.8);
+}
+.info-box a { color: var(--teal); }
+.info-box ol { margin-left: 16px; margin-top: 6px; }
+.info-box code {
+  background: rgba(255,255,255,0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+/* Stats */
+.stat-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.stat-chip .big { font-family: var(--font-h); font-size: 1.4rem; }
+
+/* Confetti */
+.confetti-wrap {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 999;
+  overflow: hidden;
+}
+.cp {
+  position: absolute;
+  width: 9px; height: 9px;
+  animation: cfFall linear forwards;
+  border-radius: 2px;
+}
+@keyframes cfFall {
+  0%   { transform: translateY(-20px) rotate(0deg);   opacity: 1; }
+  100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+}
+
+/* toast */
+.toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 30px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  z-index: 1000;
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 1.8s forwards;
+  white-space: nowrap;
+}
+@keyframes toastIn  { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+@keyframes toastOut { to   { opacity:0; transform: translateX(-50%) translateY(10px); } }
+
+/* Empty */
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty .eico { font-size: 2.8rem; margin-bottom: 8px; }
+
+/* kid streak widget */
+.streak-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  background: var(--card);
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  margin-bottom: 16px;
+}
+.streak-row .fire { font-size: 1.6rem; }
+.streak-row .s-text { flex: 1; }
+.streak-row .s-text strong { font-family: var(--font-h); font-size: 1rem; }
+.streak-row .s-text span  { display: block; font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+.streak-row .s-num { font-family: var(--font-h); font-size: 1.8rem; font-weight: 700; color: var(--yellow); }
+</style>
+</head>
+<body>
+
+<!-- ── WELCOME ─────────────────────────────────────────────────────────── -->
+<div class="screen active" id="screen-welcome">
+  <div class="welcome-blob">🍽️</div>
+  <div class="welcome-title">Küchen&shy;dienst</div>
+  <p class="welcome-sub">Wer bist du heute?</p>
+
+  <div class="role-cards" id="roleCards">
+    <!-- filled by JS -->
+  </div>
+
+  <div style="margin-top:20px;">
+    <button class="btn-secondary" style="width:200px;" onclick="showSetupParent()">
+      👨‍👩‍👧 Eltern-Login
+    </button>
+  </div>
+</div>
+
+<!-- ── SETUP KID ──────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-setup">
+  <div class="setup-inner">
+    <div class="setup-header">
+      <h2>👋 Hallo!</h2>
+      <p>Wie heißt du?</p>
+    </div>
+
+    <div>
+      <div class="field-label">Dein Name</div>
+      <div class="input-wrap">
+        <input id="setup-name" type="text" placeholder="z.B. Lena" maxlength="20" autocomplete="off">
+      </div>
+    </div>
+
+    <div>
+      <div class="field-label">Dein Tier</div>
+      <div class="emoji-row" id="setupEmojiRow"></div>
+    </div>
+
+    <div>
+      <div class="field-label">Deine Farbe</div>
+      <div class="color-row" id="setupColorRow"></div>
+    </div>
+
+    <div class="divider">oder</div>
+
+    <div>
+      <div class="field-label">Familie-Code eingeben</div>
+      <div class="input-wrap">
+        <input id="setup-code" type="text" placeholder="z.B. Familie123" autocomplete="off" style="text-transform:uppercase;">
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="setupKid()">Loslegen! 🚀</button>
+    <button class="btn-secondary" onclick="showScreen('screen-welcome')">Zurück</button>
+  </div>
+</div>
+
+<!-- ── SETUP PARENT ───────────────────────────────────────────────────── -->
+<div class="screen" id="screen-setup-parent">
+  <div class="setup-inner">
+    <div class="setup-header">
+      <h2>👨‍👩‍👧 Eltern</h2>
+      <p>Anmeldung als Elternteil</p>
+    </div>
+    <div>
+      <div class="field-label">Eltern-Passwort</div>
+      <div class="input-wrap">
+        <input id="parent-pw" type="password" placeholder="Passwort eingeben">
+      </div>
+    </div>
+    <div id="parent-pw-hint" style="font-size:0.8rem;color:var(--muted);margin-top:-8px;">
+      (Beim ersten Mal wird dieses Passwort gesetzt)
+    </div>
+    <button class="btn-primary" onclick="loginParent()">Einloggen</button>
+    <button class="btn-secondary" onclick="showScreen('screen-welcome')">Zurück</button>
+  </div>
+</div>
+
+<!-- ── KID HOME ───────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-kid">
+  <div class="kid-bg-glow top" id="glowTop"></div>
+  <div class="kid-bg-glow bottom" id="glowBottom"></div>
+
+  <div class="kid-header">
+    <div class="kid-greeting">
+      <span class="hey">Hey,</span>
+      <span class="name" id="kidName">Lena</span>
+    </div>
+    <div class="kid-avatar" id="kidAvatar" style="background:rgba(255,107,53,0.2)">🐱</div>
+  </div>
+
+  <div class="meals-section" id="mealsSection">
+    <!-- filled by JS -->
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn active" onclick="kidTab('home',this)">
+      <span class="ni">🏠</span>Heute
+    </button>
+    <button class="nav-btn" onclick="kidTab('history',this)">
+      <span class="ni">📅</span>Verlauf
+    </button>
+    <button class="nav-btn" onclick="kidTab('logout',this)">
+      <span class="ni">👋</span>Raus
+    </button>
+  </div>
+</div>
+
+<!-- ── PARENT ─────────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-parent">
+  <div class="parent-header">
+    <h1>🍽️ Übersicht</h1>
+    <div id="fbStatus" class="badge" style="background:rgba(255,255,255,0.1);color:var(--muted);">
+      <span class="status-dot status-err"></span>Nicht verbunden
+    </div>
+  </div>
+
+  <div class="parent-tabs">
+    <button class="tab-btn active" onclick="parentTab('overview',this)">📊 Übersicht</button>
+    <button class="tab-btn" onclick="parentTab('entries',this)">📋 Einträge</button>
+    <button class="tab-btn" onclick="parentTab('settings',this)">⚙️ Setup</button>
+  </div>
+
+  <div class="parent-content" id="parentContent">
+    <!-- filled by JS -->
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn" onclick="showScreen('screen-welcome');logout()">
+      <span class="ni">👋</span>Raus
+    </button>
+  </div>
+</div>
+
+<!-- Confetti container -->
+<div class="confetti-wrap" id="confettiWrap"></div>
+
+<!-- ── SCRIPT ─────────────────────────────────────────────────────────── -->
+<script>
+// ── CONSTANTS ────────────────────────────────────────────────────────────────
+const EMOJIS  = ['🐱','🐶','🦊','🐸','🦋','🐼','🦄','🐲','⭐','🚀','🌸','🎸'];
+const COLORS  = ['#FF6B35','#00B4D8','#C77DFF','#FFE66D','#FF70A6','#06D6A0','#4895EF','#FF6B6B'];
+const MEALS   = [
+  { id:'breakfast', icon:'🥐', label:'Frühstück', color:'#FFD60A',
+    time:'Morgens', tasks:['🍽️ Tisch decken','🧴 Marmelade raus','☕ Tassen bereitstellen','🧹 Abräumen'] },
+  { id:'lunch',     icon:'🍲', label:'Mittagessen', color:'#FF6B35',
+    time:'Mittags', tasks:['🍽️ Tisch decken','🫧 Abwaschen','🧺 Abtrocknen','🗄️ Aufräumen'] },
+  { id:'dinner',    icon:'🌙', label:'Abendessen', color:'#00B4D8',
+    time:'Abends',  tasks:['🍽️ Tisch decken','🫧 Abwaschen','🧺 Abtrocknen','🧹 Boden fegen'] },
+];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let state = {
+  role: null, // 'kid' | 'parent'
+  kid: null,  // { id, name, emoji, color }
+  familyId: null,
+  parentTab: 'overview',
+  kidTab: 'home',
+  selectedMealTasks: {}, // mealId -> Set of task labels
+  fbReady: false,
+  parentPw: null,
+};
+
+// ── UTILS ────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const todayStr = () => new Date().toISOString().slice(0,10); // YYYY-MM-DD
+const dayNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
+function confetti() {
+  const colors = ['#FF6B35','#FFD60A','#06D6A0','#00B4D8','#FF70A6','#C77DFF'];
+  const w = $('confettiWrap');
+  for (let i = 0; i < 70; i++) {
+    const p = document.createElement('div');
+    p.className = 'cp';
+    p.style.cssText = `
+      left:${Math.random()*100}vw;
+      background:${colors[i%colors.length]};
+      width:${Math.random()*8+5}px;
+      height:${Math.random()*8+5}px;
+      border-radius:${Math.random()>.5?'50%':'3px'};
+      animation-duration:${Math.random()*1.5+1}s;
+      animation-delay:${Math.random()*0.6}s;
+    `;
+    w.appendChild(p);
+    setTimeout(() => p.remove(), 3000);
+  }
+}
+
+// ── FIREBASE HELPER ──────────────────────────────────────────────────────────
+function familyPath(sub='') {
+  return `families/${state.familyId}${sub ? '/'+sub : ''}`;
+}
+
+async function fbReady() {
+  if (window._dbReady) return true;
+  return new Promise(res => window.addEventListener('db-ready', () => res(true), {once:true}));
+}
+
+// ── WELCOME ──────────────────────────────────────────────────────────────────
+function renderWelcome() {
+  const rc = $('roleCards');
+  // Load saved kids
+  const kids = loadKids();
+  if (!kids.length) {
+    rc.innerHTML = `
+      <button class="role-card" onclick="showSetupKid()">
+        <span class="role-icon">🧒</span>
+        <div><h3>Ich bin ein Kind</h3><p>Neues Profil anlegen</p></div>
+      </button>`;
+  } else {
+    rc.innerHTML = kids.map(k => `
+      <button class="role-card" onclick="loginKid('${k.id}')">
+        <span class="role-icon" style="font-size:2rem">${k.emoji}</span>
+        <div>
+          <h3 style="color:${k.color}">${k.name}</h3>
+          <p>Als ${k.name} einloggen</p>
+        </div>
+      </button>`).join('') + `
+      <button class="role-card" onclick="showSetupKid()" style="border-style:dashed;opacity:0.7;">
+        <span class="role-icon">➕</span>
+        <div><h3>Neues Kind</h3><p>Profil anlegen</p></div>
+      </button>`;
+  }
+}
+
+function loadKids() {
+  return JSON.parse(localStorage.getItem('kids') || '[]');
+}
+function saveKids(kids) {
+  localStorage.setItem('kids', JSON.stringify(kids));
+}
+
+// ── SETUP KID ─────────────────────────────────────────────────────────────────
+let _selEmoji = EMOJIS[0], _selColor = COLORS[0];
+
+function showSetupKid() {
+  _selEmoji = EMOJIS[0]; _selColor = COLORS[0];
+  renderSetupEmoji(); renderSetupColor();
+  showScreen('screen-setup');
+}
+
+function renderSetupEmoji() {
+  $('setupEmojiRow').innerHTML = EMOJIS.map(e =>
+    `<div class="emoji-opt ${e===_selEmoji?'sel':''}" onclick="pickE('${e}')">${e}</div>`
+  ).join('');
+}
+function renderSetupColor() {
+  $('setupColorRow').innerHTML = COLORS.map(c =>
+    `<div class="color-dot ${c===_selColor?'sel':''}" style="background:${c}" onclick="pickC('${c}')"></div>`
+  ).join('');
+}
+function pickE(e) { _selEmoji = e; renderSetupEmoji(); }
+function pickC(c) { _selColor = c; renderSetupColor(); }
+
+async function setupKid() {
+  const name = $('setup-name').value.trim();
+  const code = $('setup-code').value.trim().toUpperCase() || 'FAMILIE';
+  if (!name) { toast('Bitte deinen Namen eingeben! 😊'); return; }
+
+  const kids = loadKids();
+  const id = 'kid_' + Date.now();
+  const kid = { id, name, emoji: _selEmoji, color: _selColor, familyId: code };
+  kids.push(kid);
+  saveKids(kids);
+
+  // Register in Firebase
+  await fbReady();
+  try {
+    await window.dbSet(familyPath_for(code, 'kids/'+id), { id, name, emoji: _selEmoji, color: _selColor });
+  } catch(e) { console.log('FB write failed, offline mode'); }
+
+  loginKid(id);
+}
+
+function familyPath_for(fid, sub='') {
+  return `families/${fid}${sub ? '/'+sub : ''}`;
+}
+
+function loginKid(id) {
+  const kids = loadKids();
+  const kid = kids.find(k => k.id === id);
+  if (!kid) { toast('Profil nicht gefunden'); return; }
+  state.kid = kid;
+  state.familyId = kid.familyId || 'FAMILIE';
+  state.role = 'kid';
+  state.selectedMealTasks = {};
+
+  $('kidName').textContent = kid.name;
+  $('kidAvatar').textContent = kid.emoji;
+  $('kidAvatar').style.background = kid.color + '33';
+  $('glowTop').style.background = kid.color;
+  $('glowBottom').style.background = kid.color;
+
+  showScreen('screen-kid');
+  renderKidHome();
+  listenKidEntries();
+}
+
+// ── KID HOME ─────────────────────────────────────────────────────────────────
+let _kidEntriesUnsub = null;
+let _todayEntries = {}; // mealId -> entry
+
+async function listenKidEntries() {
+  await fbReady();
+  const path = familyPath_for(state.familyId, `entries/${todayStr()}/${state.kid.id}`);
+  if (_kidEntriesUnsub) _kidEntriesUnsub();
+  _kidEntriesUnsub = window.dbListen(path, data => {
+    _todayEntries = data || {};
+    renderKidHome();
+  });
+}
+
+function renderKidHome() {
+  const sec = $('mealsSection');
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString('de-DE', {weekday:'long', day:'numeric', month:'long'});
+
+  const streak = calcKidStreak();
+
+  sec.innerHTML = `
+    <div class="date-label">${dateLabel}</div>
+    <div class="streak-row">
+      <span class="fire">🔥</span>
+      <div class="s-text">
+        <strong>Aktuelle Serie</strong>
+        <span>Tage mit Küchendienst</span>
+      </div>
+      <span class="s-num">${streak}</span>
+    </div>
+  ` + MEALS.map(m => renderMealCard(m)).join('');
+}
+
+function renderMealCard(m) {
+  const done = _todayEntries[m.id];
+  const color = m.color;
+  const tasks = state.selectedMealTasks[m.id] || new Set();
+
+  const taskChips = !done ? m.tasks.map(t => `
+    <div class="task-chip ${tasks.has(t)?'sel':''}" onclick="toggleTask('${m.id}','${t.replace(/'/g,'\\'')}')">
+      ${t}
+    </div>
+  `).join('') : '';
+
+  const submitBtn = !done ? `
+    <button class="submit-meal-btn"
+      style="background:linear-gradient(135deg,${color},${color}aa);color:${color==='#FFD60A'?'#111':'white'};box-shadow:0 4px 14px ${color}55"
+      onclick="submitMeal('${m.id}')">
+      ✅ ${m.label} eintragen
+    </button>` : '';
+
+  const doneInfo = done ? `
+    <div class="meal-time">✅ Erledigt um ${new Date(done.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr
+      ${done.tasks && done.tasks.length ? '· ' + done.tasks.join(', ') : ''}
+    </div>` : '';
+
+  return `
+    <div class="meal-card ${done?'done':''}" style="${done?`background:${color}18;border-color:${color}44;`:''}">
+      <div class="meal-top">
+        <div class="meal-icon-wrap" style="background:${color}22">${m.icon}</div>
+        <div class="meal-check" style="${done?`background:${color};color:${color==='#FFD60A'?'#111':'white'};`:''}">
+          ${done ? '✓' : ''}
+        </div>
+      </div>
+      <div class="meal-title" style="${done?`color:${color}`:''}>${m.label}</div>
+      <div class="meal-desc">${m.time}</div>
+      ${!done ? `<div class="tasks-check-row">${taskChips}</div>` : ''}
+      ${submitBtn}
+      ${doneInfo}
+    </div>`;
+}
+
+function toggleTask(mealId, task) {
+  if (!state.selectedMealTasks[mealId]) state.selectedMealTasks[mealId] = new Set();
+  const s = state.selectedMealTasks[mealId];
+  s.has(task) ? s.delete(task) : s.add(task);
+  renderKidHome();
+}
+
+async function submitMeal(mealId) {
+  const tasks = [...(state.selectedMealTasks[mealId] || [])];
+  const entry = {
+    kidId:  state.kid.id,
+    kidName: state.kid.name,
+    kidEmoji: state.kid.emoji,
+    kidColor: state.kid.color,
+    mealId,
+    mealLabel: MEALS.find(m=>m.id===mealId).label,
+    tasks,
+    date: todayStr(),
+    ts: Date.now(),
+  };
+
+  // Save locally
+  const key = `entries_${state.kid.id}`;
+  const local = JSON.parse(localStorage.getItem(key)||'[]');
+  local.push(entry);
+  localStorage.setItem(key, JSON.stringify(local));
+
+  // Save to Firebase
+  try {
+    await fbReady();
+    const path = familyPath_for(state.familyId, `entries/${todayStr()}/${state.kid.id}/${mealId}`);
+    await window.dbSet(path, entry);
+    toast('🎉 Super gemacht!');
+    confetti();
+  } catch(e) {
+    // Offline fallback
+    _todayEntries[mealId] = entry;
+    toast('✅ Gespeichert (offline)');
+    confetti();
+    renderKidHome();
+  }
+}
+
+function calcKidStreak() {
+  if (!state.kid) return 0;
+  const key = `entries_${state.kid.id}`;
+  const entries = JSON.parse(localStorage.getItem(key)||'[]');
+  const days = [...new Set(entries.map(e=>e.date))].sort().reverse();
+  if (!days.length) return 0;
+  const today = todayStr();
+  let streak = 0;
+  let check = new Date(today);
+  for (let i = 0; i < 365; i++) {
+    const d = check.toISOString().slice(0,10);
+    if (days.includes(d)) { streak++; check.setDate(check.getDate()-1); }
+    else break;
+  }
+  return streak;
+}
+
+function kidTab(tab, btn) {
+  if (tab === 'logout') { logout(); return; }
+  document.querySelectorAll('#screen-kid .nav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  state.kidTab = tab;
+  if (tab === 'home') renderKidHome();
+  else if (tab === 'history') renderKidHistory();
+}
+
+function renderKidHistory() {
+  const sec = $('mealsSection');
+  const key = `entries_${state.kid.id}`;
+  const entries = JSON.parse(localStorage.getItem(key)||'[]').reverse();
+  if (!entries.length) {
+    sec.innerHTML = `<div class="empty"><div class="eico">📭</div><p>Noch keine Einträge</p></div>`;
+    return;
+  }
+  let html = '';
+  let lastDate = '';
+  entries.forEach(e => {
+    if (e.date !== lastDate) {
+      lastDate = e.date;
+      const d = new Date(e.date);
+      html += `<div class="date-label">${d.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</div>`;
+    }
+    const meal = MEALS.find(m=>m.id===e.mealId);
+    html += `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="width:40px;height:40px;border-radius:12px;background:${meal.color}22;display:flex;align-items:center;justify-content:center;font-size:1.4rem">${meal.icon}</div>
+        <div style="flex:1">
+          <div style="font-weight:700">${meal.label}</div>
+          ${e.tasks.length ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:2px">${e.tasks.join(' · ')}</div>` : ''}
+        </div>
+        <div style="font-size:0.75rem;color:var(--muted);font-weight:600">${new Date(e.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>`;
+  });
+  sec.innerHTML = `<div class="date-label">Mein Verlauf</div>` + html;
+}
+
+// ── PARENT ────────────────────────────────────────────────────────────────────
+function showSetupParent() { showScreen('screen-setup-parent'); }
+
+function loginParent() {
+  const pw = $('parent-pw').value;
+  if (!pw) { toast('Bitte Passwort eingeben'); return; }
+  const saved = localStorage.getItem('parent_pw');
+  if (!saved) {
+    localStorage.setItem('parent_pw', pw);
+    toast('✅ Passwort gesetzt');
+  } else if (saved !== pw) {
+    toast('❌ Falsches Passwort'); return;
+  }
+  state.role = 'parent';
+  state.familyId = localStorage.getItem('family_id') || 'FAMILIE';
+  showScreen('screen-parent');
+  updateFbStatus();
+  renderParent('overview');
+  listenParentEntries();
+}
+
+let _parentEntries = {};
+let _parentEntriesUnsub = null;
+
+async function listenParentEntries() {
+  await fbReady();
+  const path = familyPath_for(state.familyId, 'entries');
+  if (_parentEntriesUnsub) _parentEntriesUnsub();
+  _parentEntriesUnsub = window.dbListen(path, data => {
+    _parentEntries = data || {};
+    renderParent(state.parentTab);
+  });
+}
+
+function parentTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  state.parentTab = tab;
+  renderParent(tab);
+}
+
+function renderParent(tab) {
+  const c = $('parentContent');
+  if (tab === 'overview')  c.innerHTML = renderOverview();
+  if (tab === 'entries')   c.innerHTML = renderEntries();
+  if (tab === 'settings')  c.innerHTML = renderSettings();
+}
+
+function getAllEntriesFlat() {
+  const flat = [];
+  Object.entries(_parentEntries).forEach(([date, byKid]) => {
+    Object.entries(byKid).forEach(([kidId, byMeal]) => {
+      Object.entries(byMeal).forEach(([mealId, entry]) => {
+        flat.push({ ...entry, date, kidId, mealId });
+      });
+    });
+  });
+  return flat.sort((a,b) => b.ts - a.ts);
+}
+
+function renderOverview() {
+  const entries = getAllEntriesFlat();
+  // Get unique kids from entries
+  const kidsMap = {};
+  entries.forEach(e => {
+    if (!kidsMap[e.kidId]) kidsMap[e.kidId] = { id:e.kidId, name:e.kidName, emoji:e.kidEmoji, color:e.kidColor };
+  });
+  const kids = Object.values(kidsMap);
+
+  if (!kids.length) {
+    return `<div class="empty"><div class="eico">👶</div><p>Noch keine Kinder eingetragen</p></div>`;
+  }
+
+  // Week grid: last 7 days
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().slice(0,10));
+  }
+
+  return kids.map(kid => {
+    const kidEntries = entries.filter(e=>e.kidId===kid.id);
+    const total = kidEntries.length;
+    const thisWeek = kidEntries.filter(e=>days.includes(e.date)).length;
+
+    const grid = days.map(d => {
+      const de = new Date(d); const isToday = d === todayStr();
+      const count = kidEntries.filter(e=>e.date===d).length;
+      return `<div class="day-col">
+        <div class="day-name">${dayNames[de.getDay()]}</div>
+        <div class="day-dot ${count>0?'has':''} ${isToday?'today':''}">${count>0?count:''}</div>
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="kid-overview-card">
+        <div class="koc-header">
+          <div class="koc-avatar" style="background:${kid.color}22">${kid.emoji}</div>
+          <div>
+            <div class="koc-name" style="color:${kid.color}">${kid.name}</div>
+            <div class="koc-total">${total} Einsätze gesamt · ${thisWeek} diese Woche</div>
+          </div>
+        </div>
+        <div class="week-grid">${grid}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderEntries() {
+  const entries = getAllEntriesFlat();
+  if (!entries.length) return `<div class="empty"><div class="eico">📭</div><p>Noch keine Einträge</p></div>`;
+
+  let html = '';
+  let lastDate = '';
+  entries.forEach(e => {
+    if (e.date !== lastDate) {
+      lastDate = e.date;
+      const d = new Date(e.date);
+      const isToday = e.date === todayStr();
+      html += `<div class="date-label" style="margin-top:12px">${isToday ? '🟢 Heute' : d.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'short'})}</div>`;
+    }
+    const meal = MEALS.find(m=>m.id===e.mealId) || {};
+    html += `
+      <div class="entry-row">
+        <div class="entry-meal-icon" style="background:${(meal.color||'#888')}22">${meal.icon||'🍽️'}</div>
+        <div class="entry-info">
+          <div class="entry-top">
+            <span class="entry-who">${e.kidEmoji} ${e.kidName}</span>
+            <span class="entry-when">${new Date(e.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>
+          </div>
+          <div class="entry-meal-name">${meal.label||e.mealId}</div>
+          ${e.tasks && e.tasks.length ? `<div class="entry-chips">${e.tasks.map(t=>`<span class="entry-chip">${t}</span>`).join('')}</div>` : ''}
+        </div>
+        <button class="delete-x" onclick="deleteEntry('${e.date}','${e.kidId}','${e.mealId}')">🗑</button>
+      </div>`;
+  });
+  return html;
+}
+
+async function deleteEntry(date, kidId, mealId) {
+  if (!confirm('Eintrag löschen?')) return;
+  await fbReady();
+  await window.dbRemove(familyPath_for(state.familyId, `entries/${date}/${kidId}/${mealId}`));
+  toast('🗑 Gelöscht');
+}
+
+function renderSettings() {
+  const fid = state.familyId || 'FAMILIE';
+  const savedCfg = JSON.parse(localStorage.getItem('fb_config')||'{}');
+  return `
+    <div class="setting-block">
+      <h3>👨‍👩‍👧 Familie</h3>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">
+        Dieser Code muss bei den Kindern beim Einloggen eingegeben werden.
+      </p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="flex:1;background:var(--surface);border-radius:12px;padding:12px 16px;font-family:monospace;font-size:1.1rem;font-weight:700;letter-spacing:0.1em;color:var(--yellow)">${fid}</div>
+        <button onclick="copyFamilyId()" style="padding:12px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;font-size:1rem">📋</button>
+      </div>
+      <div class="field-label">Familie-Code ändern</div>
+      <div class="input-wrap" style="margin-bottom:8px">
+        <input id="fid-input" type="text" placeholder="Neuer Code" value="${fid}" style="text-transform:uppercase">
+      </div>
+      <button class="btn-secondary" style="margin-bottom:0" onclick="saveFamilyId()">Speichern</button>
+    </div>
+
+    <div class="setting-block">
+      <h3>🔥 Firebase Verbindung</h3>
+      <div class="info-box" style="margin-bottom:14px">
+        <strong>Einmalige Einrichtung (kostenlos):</strong>
+        <ol>
+          <li>Gehe zu <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></li>
+          <li>Erstelle ein neues Projekt (z.B. "Kuechendienst")</li>
+          <li>Aktiviere <code>Realtime Database</code> → Testmodus</li>
+          <li>Gehe zu Projekteinstellungen → Deine Apps → Web-App hinzufügen</li>
+          <li>Kopiere die Konfigurationsdaten unten ein</li>
+        </ol>
+      </div>
+      <input class="fb-input" id="fb-apiKey" placeholder="apiKey" value="${savedCfg.apiKey||''}">
+      <input class="fb-input" id="fb-authDomain" placeholder="authDomain  (xxxx.firebaseapp.com)" value="${savedCfg.authDomain||''}">
+      <input class="fb-input" id="fb-databaseURL" placeholder="databaseURL  (https://xxxx-rtdb...)" value="${savedCfg.databaseURL||''}">
+      <input class="fb-input" id="fb-projectId" placeholder="projectId" value="${savedCfg.projectId||''}">
+      <input class="fb-input" id="fb-appId" placeholder="appId" value="${savedCfg.appId||''}">
+      <button class="btn-teal" onclick="saveFbConfig()">🔌 Verbinden & Speichern</button>
+    </div>
+
+    <div class="setting-block">
+      <h3>🗑 Daten</h3>
+      <button class="btn-secondary" onclick="clearAll()" style="color:#FF6B6B;border-color:#FF6B6B33">Alle Daten löschen</button>
+    </div>
+  `;
+}
+
+function copyFamilyId() {
+  navigator.clipboard.writeText(state.familyId).then(()=>toast('📋 Code kopiert!')).catch(()=>toast('Code: '+state.familyId));
+}
+
+function saveFamilyId() {
+  const v = $('fid-input').value.trim().toUpperCase();
+  if (!v) return;
+  state.familyId = v;
+  localStorage.setItem('family_id', v);
+  toast('✅ Familie-Code gespeichert');
+  renderParent('settings');
+}
+
+async function saveFbConfig() {
+  const cfg = {
+    apiKey:    $('fb-apiKey').value.trim(),
+    authDomain:$('fb-authDomain').value.trim(),
+    databaseURL:$('fb-databaseURL').value.trim(),
+    projectId: $('fb-projectId').value.trim(),
+    appId:     $('fb-appId').value.trim(),
+    storageBucket: $('fb-projectId').value.trim()+'.appspot.com',
+    messagingSenderId: '000000000000',
+  };
+  if (!cfg.apiKey || !cfg.databaseURL) { toast('❌ apiKey und databaseURL sind Pflicht'); return; }
+  localStorage.setItem('fb_config', JSON.stringify(cfg));
+  const ok = window.initFirebase(cfg);
+  if (ok) { toast('✅ Firebase verbunden!'); updateFbStatus(); listenParentEntries(); }
+  else toast('❌ Verbindung fehlgeschlagen');
+}
+
+function updateFbStatus() {
+  const el = $('fbStatus');
+  if (!el) return;
+  if (window._dbReady) {
+    el.innerHTML = `<span class="status-dot status-ok"></span>Verbunden`;
+    el.style.background = 'rgba(6,214,160,0.15)';
+    el.style.color = 'var(--green)';
+  } else {
+    el.innerHTML = `<span class="status-dot status-err"></span>Offline`;
+    el.style.background = 'rgba(255,107,53,0.1)';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+function clearAll() {
+  if (!confirm('Wirklich ALLE Daten löschen?')) return;
+  localStorage.clear();
+  location.reload();
+}
+
+function logout() {
+  state.role = null; state.kid = null;
+  if (_kidEntriesUnsub) { _kidEntriesUnsub(); _kidEntriesUnsub = null; }
+  if (_parentEntriesUnsub) { _parentEntriesUnsub(); _parentEntriesUnsub = null; }
+  renderWelcome();
+  showScreen('screen-welcome');
+}
+
+// ── DB READY LISTENER ────────────────────────────────────────────────────────
+window.addEventListener('db-ready', () => {
+  updateFbStatus();
+  if (state.role === 'parent') listenParentEntries();
+  if (state.role === 'kid')    listenKidEntries();
+});
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+renderWelcome();
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
