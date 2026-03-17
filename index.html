@@ -13,71 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Firebase -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, set, get, onValue, push, remove, update }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-  // ── FIREBASE CONFIG ──────────────────────────────────────────────────────────
-  // 👉 Ersetze diese Werte mit deinen eigenen Firebase-Projektdaten!
-  //    Anleitung weiter unten in der App (Eltern-Modus → Einstellungen)
-  const FIREBASE_CONFIG = {
-    apiKey:            window._FB_API_KEY            || "DEIN_API_KEY",
-    authDomain:        window._FB_AUTH_DOMAIN        || "DEIN_PROJEKT.firebaseapp.com",
-    databaseURL:       window._FB_DATABASE_URL       || "https://DEIN_PROJEKT-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId:         window._FB_PROJECT_ID         || "DEIN_PROJEKT",
-    storageBucket:     window._FB_STORAGE_BUCKET     || "DEIN_PROJEKT.appspot.com",
-    messagingSenderId: window._FB_MESSAGING_SENDER   || "000000000000",
-    appId:             window._FB_APP_ID             || "1:000000000000:web:0000000000000000"
-  };
-  // ────────────────────────────────────────────────────────────────────────────
-
-  let app, db;
-  let listeners = [];
-
-  window.initFirebase = (config) => {
-    try {
-      // Remove old app if exists
-      if (app) {
-        listeners.forEach(u => u());
-        listeners = [];
-      }
-      app = initializeApp(config, 'main-' + Date.now());
-      db = getDatabase(app);
-      window._db = db;
-      window._dbReady = true;
-      window.dispatchEvent(new Event('db-ready'));
-      return true;
-    } catch(e) {
-      console.error('Firebase init error:', e);
-      return false;
-    }
-  };
-
-  window.dbSet = (path, val) => set(ref(db, path), val);
-  window.dbGet = (path) => get(ref(db, path)).then(s => s.val());
-  window.dbPush = (path, val) => push(ref(db, path), val);
-  window.dbRemove = (path) => remove(ref(db, path));
-  window.dbUpdate = (path, val) => update(ref(db, path), val);
-  window.dbListen = (path, cb) => {
-    const unsub = onValue(ref(db, path), snap => cb(snap.val()));
-    listeners.push(unsub);
-    return unsub;
-  };
-
-  // Auto-init if config is stored
-  const saved = localStorage.getItem('fb_config');
-  if (saved) {
-    try { window.initFirebase(JSON.parse(saved)); }
-    catch(e) { console.log('Config invalid'); }
-  } else {
-    // Try default config (user may have hardcoded it)
-    if (FIREBASE_CONFIG.apiKey !== "DEIN_API_KEY") {
-      window.initFirebase(FIREBASE_CONFIG);
-    }
-  }
-</script>
+<!-- Firebase wird am Ende des Body geladen -->
 
 <style>
 :root {
@@ -1523,6 +1459,51 @@ renderWelcome();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
+</script>
+
+<!-- Firebase: geladen NACH dem Haupt-Script, damit onclick-Handler bereits aktiv sind -->
+<script type="module">
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+    const { getDatabase, ref, set, get, onValue, push, remove, update }
+      = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+
+    let app, db;
+    let listeners = [];
+
+    window.initFirebase = (config) => {
+      try {
+        if (app) { listeners.forEach(u => u()); listeners = []; }
+        app = initializeApp(config, 'main-' + Date.now());
+        db = getDatabase(app);
+        window._db = db;
+        window._dbReady = true;
+        window.dispatchEvent(new Event('db-ready'));
+        return true;
+      } catch(e) { console.error('Firebase init error:', e); return false; }
+    };
+
+    window.dbSet    = (path, val) => set(ref(db, path), val);
+    window.dbGet    = (path)      => get(ref(db, path)).then(s => s.val());
+    window.dbPush   = (path, val) => push(ref(db, path), val);
+    window.dbRemove = (path)      => remove(ref(db, path));
+    window.dbUpdate = (path, val) => update(ref(db, path), val);
+    window.dbListen = (path, cb)  => {
+      const unsub = onValue(ref(db, path), snap => cb(snap.val()));
+      listeners.push(unsub);
+      return unsub;
+    };
+
+    // Auto-init mit gespeicherter Config
+    const saved = localStorage.getItem('fb_config');
+    if (saved) {
+      try { window.initFirebase(JSON.parse(saved)); }
+      catch(e) { console.log('FB config ungültig'); }
+    }
+  } catch(e) {
+    console.warn('Firebase konnte nicht geladen werden (offline?):', e);
+    // App funktioniert weiter im Offline-Modus
+  }
 </script>
 </body>
 </html>
