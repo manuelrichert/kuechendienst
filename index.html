@@ -1437,6 +1437,8 @@ function clearAll() {
   location.reload();
 }
 
+function showSetupParent() { showScreen('screen-setup-parent'); }
+
 function logout() {
   state.role = null; state.kid = null;
   if (_kidEntriesUnsub) { _kidEntriesUnsub(); _kidEntriesUnsub = null; }
