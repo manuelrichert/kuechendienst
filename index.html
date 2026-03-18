@@ -46,6 +46,7 @@ html, body {
 /* ── SCREENS ── */
 .screen { display: none; height: 100dvh; flex-direction: column; overflow: hidden; }
 .screen.active { display: flex; }
+#screen-welcome { overflow-y: auto; }
 
 /* ── WELCOME ── */
 #screen-welcome {
@@ -56,7 +57,6 @@ html, body {
   padding: 48px 24px 40px;
   text-align: center;
   gap: 0;
-  overflow-y: auto;
 }
 
 .welcome-blob {
@@ -1061,8 +1061,8 @@ function renderMealCard(m) {
   const color = m.color;
   const tasks = state.selectedMealTasks[m.id] || new Set();
 
-  const taskChips = !done ? m.tasks.map(t => `
-    <div class="task-chip ${tasks.has(t)?'sel':''}" onclick="toggleTask('${m.id}','${t.replace(/'/g,'\\'')}')">
+  const taskChips = !done ? m.tasks.map((t,ti) => `
+    <div class="task-chip ${tasks.has(t)?'sel':''}" onclick="toggleTask('${m.id}',${ti})">
       ${t}
     </div>
   `).join('') : '';
@@ -1095,7 +1095,9 @@ function renderMealCard(m) {
     </div>`;
 }
 
-function toggleTask(mealId, task) {
+function toggleTask(mealId, taskIdx) {
+  const meal = MEALS.find(m => m.id === mealId);
+  const task = meal.tasks[taskIdx];
   if (!state.selectedMealTasks[mealId]) state.selectedMealTasks[mealId] = new Set();
   const s = state.selectedMealTasks[mealId];
   s.has(task) ? s.delete(task) : s.add(task);
@@ -1463,48 +1465,44 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<!-- Firebase: geladen NACH dem Haupt-Script, damit onclick-Handler bereits aktiv sind -->
-<script type="module">
-  try {
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-    const { getDatabase, ref, set, get, onValue, push, remove, update }
-      = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+<!-- Firebase über klassische Script-Tags (kein dynamischer Import) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+  let _fbListeners = [];
 
-    let app, db;
-    let listeners = [];
-
-    window.initFirebase = (config) => {
-      try {
-        if (app) { listeners.forEach(u => u()); listeners = []; }
-        app = initializeApp(config, 'main-' + Date.now());
-        db = getDatabase(app);
-        window._db = db;
-        window._dbReady = true;
-        window.dispatchEvent(new Event('db-ready'));
-        return true;
-      } catch(e) { console.error('Firebase init error:', e); return false; }
-    };
-
-    window.dbSet    = (path, val) => set(ref(db, path), val);
-    window.dbGet    = (path)      => get(ref(db, path)).then(s => s.val());
-    window.dbPush   = (path, val) => push(ref(db, path), val);
-    window.dbRemove = (path)      => remove(ref(db, path));
-    window.dbUpdate = (path, val) => update(ref(db, path), val);
-    window.dbListen = (path, cb)  => {
-      const unsub = onValue(ref(db, path), snap => cb(snap.val()));
-      listeners.push(unsub);
-      return unsub;
-    };
-
-    // Auto-init mit gespeicherter Config
-    const saved = localStorage.getItem('fb_config');
-    if (saved) {
-      try { window.initFirebase(JSON.parse(saved)); }
-      catch(e) { console.log('FB config ungültig'); }
+  window.initFirebase = (config) => {
+    try {
+      // Lösche alte App falls vorhanden
+      if (firebase.apps.length) {
+        firebase.apps.forEach(app => app.delete());
+      }
+      firebase.initializeApp(config);
+      window._dbReady = true;
+      window.dispatchEvent(new Event('db-ready'));
+      return true;
+    } catch(e) {
+      console.error('Firebase Fehler:', e);
+      return false;
     }
-  } catch(e) {
-    console.warn('Firebase konnte nicht geladen werden (offline?):', e);
-    // App funktioniert weiter im Offline-Modus
+  };
+
+  window.dbSet    = (path, val) => firebase.database().ref(path).set(val);
+  window.dbGet    = (path)      => firebase.database().ref(path).get().then(s => s.val());
+  window.dbPush   = (path, val) => firebase.database().ref(path).push(val);
+  window.dbRemove = (path)      => firebase.database().ref(path).remove();
+  window.dbUpdate = (path, val) => firebase.database().ref(path).update(val);
+  window.dbListen = (path, cb)  => {
+    const ref = firebase.database().ref(path);
+    ref.on('value', snap => cb(snap.val()));
+    return () => ref.off('value');
+  };
+
+  // Auto-init mit gespeicherter Config
+  const _saved = localStorage.getItem('fb_config');
+  if (_saved) {
+    try { window.initFirebase(JSON.parse(_saved)); }
+    catch(e) { console.log('FB Config ungültig'); }
   }
 </script>
 </body>
